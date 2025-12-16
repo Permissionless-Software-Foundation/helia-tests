@@ -6,3 +6,16 @@ Core features I depend on:
 - Two nodes directly connected over ipv4 can transfer a file.
 - Two firewalled nodes can connect to one other using webRTC and a v2 Circuit Relay.
 - Two nodes can communicate over pubsub
+
+
+In the tests below:
+- bob = IPFS node on a dev computer, on a home internet connection (firewalled)
+- alice = IPFS node on VPS with public ip4 address
+- sam = IPFS node on client computer, on a home internet connection, behind a firewall.
+
+Most tests focus no bob and alice, but some tests will involve all three peers.
+
+Tests:
+- 01-ip4-peer-connect - This is the simplest test. One should run on a VPS with a public IP4 address. The other should run on a dev computer behind a firewall. The purpose of the test is to ensure the two nodes can connect and exchange announcement objects over pubsub.
+
+
