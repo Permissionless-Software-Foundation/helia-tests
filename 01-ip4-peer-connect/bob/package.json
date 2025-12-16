@@ -1,11 +1,33 @@
 {
   "name": "bob",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "bob.js",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node bob.js"
   },
   "author": "",
   "license": "ISC",
-  "description": ""
+  "description": "Bob IPFS node for IP4 peer connection testing",
+  "dependencies": {
+    "@chainsafe/libp2p-gossipsub": "14.1.0",
+    "@chainsafe/libp2p-noise": "16.0.1",
+    "@chainsafe/libp2p-yamux": "7.0.1",
+    "@libp2p/circuit-relay-v2": "3.2.2",
+    "@libp2p/identify": "3.0.22",
+    "@libp2p/tcp": "10.1.2",
+    "@libp2p/webrtc": "5.2.2",
+    "@libp2p/websockets": "9.2.2",
+    "@multiformats/multiaddr": "12.5.1",
+    "blockstore-fs": "2.0.2",
+    "datastore-fs": "10.0.2",
+    "helia": "5.2.1",
+    "helia-coord": "1.8.0",
+    "libp2p": "2.6.0",
+    "minimal-slp-wallet": "5.12.0",
+    "public-ip": "6.0.1"
+  },
+  "overrides": {
+    "@multiformats/multiaddr-to-uri": "12.0.0"
+  }
 }
