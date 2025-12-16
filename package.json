@@ -1,0 +1,26 @@
+{
+  "name": "helia-tests",
+  "version": "1.0.0",
+  "description": "Tests for helia-coord library",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/christroutner/helia-tests.git"
+  },
+  "keywords": [
+    "ipfs",
+    "helia",
+    "libp2p",
+    "e2e",
+    "tests"
+  ],
+  "author": "Chris Troutner <chris.troutner@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/christroutner/helia-tests/issues"
+  },
+  "homepage": "https://github.com/christroutner/helia-tests#readme"
+}
