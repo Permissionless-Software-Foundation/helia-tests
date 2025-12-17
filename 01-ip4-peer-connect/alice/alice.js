@@ -1,0 +1,142 @@
+/*
+  This script creates a Helia IPFS node and attaches helia-coord to it.
+  This is the "bob" node for testing IP4 peer connections.
+*/
+
+// Polyfill for Promise.withResolvers (Node.js v22+ feature, needed for Node.js v20)
+if (!Promise.withResolvers) {
+  Promise.withResolvers = function () {
+    let resolve, reject
+    const promise = new Promise((res, rej) => {
+      resolve = res
+      reject = rej
+    })
+    return { promise, resolve, reject }
+  }
+}
+
+// Global npm libraries
+import { createHelia } from 'helia'
+import fs from 'fs'
+import { FsBlockstore } from 'blockstore-fs'
+import { FsDatastore } from 'datastore-fs'
+import { createLibp2p } from 'libp2p'
+import { tcp } from '@libp2p/tcp'
+import { noise } from '@chainsafe/libp2p-noise'
+import { yamux } from '@chainsafe/libp2p-yamux'
+import { identify } from '@libp2p/identify'
+import { circuitRelayTransport } from '@libp2p/circuit-relay-v2'
+import { gossipsub } from '@chainsafe/libp2p-gossipsub'
+import { webSockets } from '@libp2p/websockets'
+import { publicIpv4 } from 'public-ip'
+import { multiaddr } from '@multiformats/multiaddr'
+import { webRTC } from '@libp2p/webrtc'
+import SlpWallet from 'minimal-slp-wallet'
+import IpfsCoord from 'helia-coord'
+
+const ROOT_DIR = './'
+const IPFS_DIR = './.ipfsdata/ipfs'
+
+async function start () {
+  try {
+    // Ensure the directory structure exists that is needed by the IPFS node to store data.
+    ensureBlocksDir()
+
+    // Create block and data stores.
+    const blockstore = new FsBlockstore(`${IPFS_DIR}/blockstore`)
+    const datastore = new FsDatastore(`${IPFS_DIR}/datastore`)
+
+    // Configure services
+    const services = {
+      identify: identify(),
+      pubsub: gossipsub({ allowPublishToZeroTopicPeers: true })
+    }
+
+    // libp2p is the networking layer that underpins Helia
+    const libp2p = await createLibp2p({
+      datastore,
+      addresses: {
+        listen: [
+          '/ip4/127.0.0.1/tcp/0',
+          '/ip4/0.0.0.0/tcp/4001',
+          '/ip4/0.0.0.0/tcp/4003/ws',
+          '/webrtc',
+          '/p2p-circuit'
+        ]
+      },
+      transports: [
+        tcp(),
+        webSockets(),
+        circuitRelayTransport({ discoverRelays: 3 }),
+        webRTC()
+      ],
+      connectionEncrypters: [
+        noise()
+      ],
+      streamMuxers: [
+        yamux()
+      ],
+      services
+    })
+
+    // Create a Helia node
+    const ipfs = await createHelia({
+      blockstore,
+      datastore,
+      libp2p
+    })
+
+    const id = ipfs.libp2p.peerId.toString()
+    console.log('IPFS ID: ', id)
+
+    // Attempt to guess our ip4 IP address.
+    const ip4 = await publicIpv4()
+    let detectedMultiaddr = `/ip4/${ip4}/tcp/4001/p2p/${id}`
+    detectedMultiaddr = multiaddr(detectedMultiaddr)
+
+    // Get the multiaddrs for the node.
+    const multiaddrs = ipfs.libp2p.getMultiaddrs()
+    multiaddrs.push(detectedMultiaddr)
+    console.log('Multiaddrs: ', multiaddrs)
+
+    // Create an instance of wallet
+    const wallet = new SlpWallet()
+    await wallet.walletInfoPromise
+
+    // Pass IPFS and wallet to ipfs-coord when instantiating it.
+    const ipfsCoord = new IpfsCoord({
+      ipfs,
+      wallet,
+      type: 'node.js',
+      nodeType: 'external',
+      debugLevel: 2
+    })
+
+    await ipfsCoord.start()
+    console.log('IPFS and the coordination library is ready.')
+  } catch (err) {
+    console.error('Error in start(): ', err)
+    process.exit(1)
+  }
+}
+
+// Ensure that the directories exist to store blocks from the IPFS network.
+// This function is called at startup, before the IPFS node is started.
+function ensureBlocksDir () {
+  try {
+    !fs.existsSync(`${ROOT_DIR}.ipfsdata`) && fs.mkdirSync(`${ROOT_DIR}.ipfsdata`)
+
+    !fs.existsSync(`${IPFS_DIR}`) && fs.mkdirSync(`${IPFS_DIR}`)
+
+    !fs.existsSync(`${IPFS_DIR}/blockstore`) && fs.mkdirSync(`${IPFS_DIR}/blockstore`)
+
+    !fs.existsSync(`${IPFS_DIR}/datastore`) && fs.mkdirSync(`${IPFS_DIR}/datastore`)
+
+    return true
+  } catch (err) {
+    console.error('Error in ensureBlocksDir(): ', err)
+    throw err
+  }
+}
+
+start()
