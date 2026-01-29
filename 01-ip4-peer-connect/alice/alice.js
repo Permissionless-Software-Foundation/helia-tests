@@ -103,8 +103,21 @@ async function start () {
     const wallet = new SlpWallet()
     await wallet.walletInfoPromise
 
+    // Pass IPFS and wallet to ipfs-coord when instantiating it.
+    // We'll set up the message handler after ipfsCoord is created so it can access it
+    const ipfsCoord = new IpfsCoord({
+      ipfs,
+      wallet,
+      type: 'node.js',
+      nodeType: 'external',
+      debugLevel: 2,
+      privateLog: null // Will be set below
+    })
+
     // Set up private message handler
     // This will be called when private messages are received
+    // IMPORTANT: This handler immediately adds Bob to peerData when a test message is received
+    // so that the automatic acknowledgment mechanism can use Bob's encryption key
     const handlePrivateMessage = (decryptedPayload, from) => {
       try {
         console.log(`Private message received from ${from}:`, decryptedPayload)
@@ -145,6 +158,47 @@ async function start () {
             if (messageData.randomNumber !== undefined) {
               console.log(`Received random number: ${messageData.randomNumber}`)
             }
+            
+            // CRITICAL: Immediately add Bob to peerData with encryption key from message
+            // This must happen BEFORE the automatic acknowledgment mechanism tries to send an ack
+            if (messageData.encryptPubKey) {
+              console.log('\n[handlePrivateMessage] Adding Bob to peerData with encryption key from message...')
+              
+              // Check if Bob is already in peerData
+              const existingPeerData = ipfsCoord.thisNode.peerData.filter(x => x.from === bobPeerId)
+              
+              if (existingPeerData.length === 0) {
+                // Add Bob to peerList if not already there
+                if (!ipfsCoord.thisNode.peerList.includes(bobPeerId)) {
+                  ipfsCoord.thisNode.peerList.push(bobPeerId)
+                }
+                
+                // Create peer data object with Bob's encryption key
+                const bobPeerData = {
+                  from: bobPeerId,
+                  data: {
+                    encryptPubKey: messageData.encryptPubKey
+                  }
+                }
+                
+                // Add to peerData
+                ipfsCoord.thisNode.peerData.push(bobPeerData)
+                console.log('[handlePrivateMessage] Bob added to peerData with encryption key from message')
+              } else {
+                // Update existing peer data with encryption key if not present
+                if (!existingPeerData[0].data || !existingPeerData[0].data.encryptPubKey) {
+                  if (!existingPeerData[0].data) {
+                    existingPeerData[0].data = {}
+                  }
+                  existingPeerData[0].data.encryptPubKey = messageData.encryptPubKey
+                  console.log('[handlePrivateMessage] Updated existing Bob peerData with encryption key from message')
+                } else {
+                  console.log('[handlePrivateMessage] Bob already has encryption key in peerData')
+                }
+              }
+            } else {
+              console.warn('[handlePrivateMessage] WARNING: Bob\'s encryption key not found in test message!')
+            }
           }
         }
       } catch (err) {
@@ -152,18 +206,101 @@ async function start () {
       }
     }
 
-    // Pass IPFS and wallet to ipfs-coord when instantiating it.
-    const ipfsCoord = new IpfsCoord({
-      ipfs,
-      wallet,
-      type: 'node.js',
-      nodeType: 'external',
-      debugLevel: 2,
-      privateLog: handlePrivateMessage
-    })
+    // Attach the message handler to ipfsCoord
+    ipfsCoord.thisNode.privateLog = handlePrivateMessage
 
     await ipfsCoord.start()
     console.log('IPFS and the coordination library is ready.')
+
+    // CRITICAL: Wrap the messaging adapter's handleIncomingData to add Bob to peerData
+    // BEFORE the automatic acknowledgment is sent. This must happen after start() is called.
+    const originalHandleIncomingData = ipfsCoord.adapters.pubsub.messaging.handleIncomingData.bind(ipfsCoord.adapters.pubsub.messaging)
+    
+    ipfsCoord.adapters.pubsub.messaging.handleIncomingData = async function (msg, thisNode) {
+      try {
+        // Call the original handler, but first check if this is a test message from Bob
+        // and add him to peerData if needed
+        const from = msg.detail.from.toString()
+        
+        // Parse the message data to check if it contains Bob's encryption key
+        const uint8ArrayToString = (arr) => {
+          if (typeof arr === 'string') return arr
+          return new TextDecoder().decode(arr)
+        }
+        
+        let data
+        try {
+          const dataStr = uint8ArrayToString(msg.detail.data)
+          data = JSON.parse(dataStr)
+        } catch (e) {
+          // If we can't parse, just call the original handler
+          return await originalHandleIncomingData(msg, thisNode)
+        }
+        
+        // If this message has a payload, try to decrypt it and check for test message
+        if (data.payload) {
+          try {
+            const decryptedPayload = await this.encryption.decryptMsg(data.payload, data.sender)
+            if (decryptedPayload) {
+              let messageData
+              try {
+                messageData = JSON.parse(decryptedPayload)
+              } catch {
+                // Not JSON, skip
+              }
+              
+              // Check if this is a test message from Bob with encryption key
+              if (messageData && messageData.encryptPubKey && (
+                messageData.test === true ||
+                messageData.from === 'bob' ||
+                messageData.randomNumber !== undefined
+              )) {
+                console.log('\n[handleIncomingData wrapper] Detected test message from Bob, adding to peerData...')
+                
+                // Add Bob to peerData immediately
+                const existingPeerData = thisNode.peerData.filter(x => x.from === from)
+                
+                if (existingPeerData.length === 0) {
+                  // Add Bob to peerList if not already there
+                  if (!thisNode.peerList.includes(from)) {
+                    thisNode.peerList.push(from)
+                  }
+                  
+                  // Create peer data object with Bob's encryption key
+                  const bobPeerData = {
+                    from: from,
+                    data: {
+                      encryptPubKey: messageData.encryptPubKey
+                    }
+                  }
+                  
+                  // Add to peerData
+                  thisNode.peerData.push(bobPeerData)
+                  console.log('[handleIncomingData wrapper] Bob added to peerData with encryption key')
+                } else {
+                  // Update existing peer data with encryption key if not present
+                  if (!existingPeerData[0].data || !existingPeerData[0].data.encryptPubKey) {
+                    if (!existingPeerData[0].data) {
+                      existingPeerData[0].data = {}
+                    }
+                    existingPeerData[0].data.encryptPubKey = messageData.encryptPubKey
+                    console.log('[handleIncomingData wrapper] Updated existing Bob peerData with encryption key')
+                  }
+                }
+              }
+            }
+          } catch (decryptErr) {
+            // If decryption fails, that's okay - the original handler will handle it
+            console.log('[handleIncomingData wrapper] Could not decrypt message for pre-processing:', decryptErr.message)
+          }
+        }
+      } catch (err) {
+        console.error('[handleIncomingData wrapper] Error in wrapper:', err)
+      }
+      
+      // Now call the original handler
+      return await originalHandleIncomingData(msg, thisNode)
+    }
 
     // Run the test workflow
     await runTest(ipfsCoord, ipfs)
