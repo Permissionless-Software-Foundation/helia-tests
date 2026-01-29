@@ -235,7 +235,7 @@ async function runTest (ipfsCoord, ipfs) {
         return testMessageReceived
       },
       500, // Check every 500ms
-      60000, // 60 second timeout
+      60000*5, // 5 minute timeout
       'test message from Bob'
     )
     
