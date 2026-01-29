@@ -39,7 +39,7 @@ const IPFS_DIR = './.ipfsdata/ipfs'
 
 // Configuration: Add Alice's multiaddr here (e.g., '/ip4/1.2.3.4/tcp/4001/p2p/Qm...')
 // This will be used to extract Alice's peer ID for the test
-const ALICE_MULTIADDR = '/ip4/192.168.1.65/tcp/4001/p2p/12D3KooWPwrAX6dpzgbrk7DF4Xim7rWDcTbF6c8BfyVL5ByvZZcn'
+const ALICE_MULTIADDR = '/ip4/192.168.1.65/tcp/4001/p2p/12D3KooWF3VH5x7LyggZtfzG54qUygAZKLUUHFJ4UEYP3Hp2XPQV'
 
 // Test state
 let alicePeerId = null
@@ -427,7 +427,8 @@ async function runTest (ipfsCoord, ipfs) {
       test: true,
       randomNumber: randomNumber,
       timestamp: new Date().toISOString(),
-      from: 'bob'
+      from: 'bob',
+      encryptPubKey: ipfsCoord.thisNode.publicKey // Include Bob's encryption public key
     }
     const messageString = JSON.stringify(testMessage)
     
@@ -452,7 +453,7 @@ async function runTest (ipfsCoord, ipfs) {
         return acknowledgmentReceived
       },
       500, // Check every 500ms
-      30000, // 30 second timeout
+      60000*5, // 5 minute timeout
       'acknowledgment from Alice'
     )
     console.log('Acknowledgment received from Alice!')

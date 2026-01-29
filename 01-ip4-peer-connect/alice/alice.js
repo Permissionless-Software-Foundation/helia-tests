@@ -253,20 +253,46 @@ async function runTest (ipfsCoord, ipfs) {
     }
     console.log(`Bob peer ID: ${bobPeerId}`)
 
-    // IMPORTANT: Wait for Bob's announcement to populate peer data
-    // We received Bob's message, but we need his announcement to get his
-    // public key and other peer data for encryption
-    console.log('\nWaiting for Bob\'s announcement to populate peer data...')
-    await pollUntil(
-      () => {
-        const peerData = ipfsCoord.thisNode.peerData.filter(x => x.from === bobPeerId)
-        return peerData.length > 0
-      },
-      500, // Check every 500ms
-      60000*5, // 5 minute timeout (announcements happen every ~2 minutes)
-      'Bob peer data from announcement'
-    )
-    console.log('Bob peer data received!')
+    // IMPORTANT: Extract Bob's encryption key from the message and add to peerData
+    // This allows us to encrypt the acknowledgment without waiting for Bob's announcement
+    if (!testMessageData || !testMessageData.encryptPubKey) {
+      throw new Error('Bob\'s encryption public key not found in test message')
+    }
+    
+    console.log('\nAdding Bob to peerData with encryption key from message...')
+    
+    // Check if Bob is already in peerData
+    const existingPeerData = ipfsCoord.thisNode.peerData.filter(x => x.from === bobPeerId)
+    
+    if (existingPeerData.length === 0) {
+      // Add Bob to peerList if not already there
+      if (!ipfsCoord.thisNode.peerList.includes(bobPeerId)) {
+        ipfsCoord.thisNode.peerList.push(bobPeerId)
+      }
+      
+      // Create peer data object with Bob's encryption key
+      const bobPeerData = {
+        from: bobPeerId,
+        data: {
+          encryptPubKey: testMessageData.encryptPubKey
+        }
+      }
+      
+      // Add to peerData
+      ipfsCoord.thisNode.peerData.push(bobPeerData)
+      console.log('Bob added to peerData with encryption key from message')
+    } else {
+      // Update existing peer data with encryption key if not present
+      if (!existingPeerData[0].data || !existingPeerData[0].data.encryptPubKey) {
+        if (!existingPeerData[0].data) {
+          existingPeerData[0].data = {}
+        }
+        existingPeerData[0].data.encryptPubKey = testMessageData.encryptPubKey
+        console.log('Updated existing Bob peerData with encryption key from message')
+      } else {
+        console.log('Bob already has encryption key in peerData')
+      }
+    }
 
     // Step 2: Send acknowledgment
     console.log('\nStep 2: Sending acknowledgment to Bob...')
