@@ -29,11 +29,48 @@ The purpose of this task is to assert that a peer node behind a firewall (*bob*)
 
 ## Test Details
 
-The *bob* node will attempt to connect directly to the *alice* node using the multiaddr configured in `bob.js`. If a multiaddr is provided, Bob will connect immediately without waiting for pubsub announcements. If the direct connection fails or no multiaddr is provided, Bob will fall back to listening for announcement objects over pubsub and connect once Alice's announcement is received.
+### Bob's Workflow
 
-Once the *bob* node has successfully registered the *alice* node as a peer, the bob node will send a private message to the alice node with a random number inside the message. The alice node will acknowledge the message by replying to it in a second private message over pubsub. Once that happens, the test will end and both nodes will shut down.
+1. **Connection Phase:**
+   - If `ALICE_MULTIADDR` is configured in `bob.js`, Bob attempts a direct TCP connection to Alice using the multiaddr.
+   - If the direct connection succeeds, Bob verifies the connection and then waits for Alice's announcement over pubsub (needed to populate peer data for encryption).
+   - If the direct connection fails or no multiaddr is provided, Bob falls back to waiting for Alice's announcement over pubsub to discover her.
+   - Once Alice appears in the peer list, Bob waits for her peer data to be populated (containing encryption keys).
 
-This will confirm that both nodes can connect to one another and transfer pubsub messages.
+2. **Messaging Phase:**
+   - Bob sends a private encrypted message to Alice containing:
+     - A random number (for verification)
+     - Bob's encryption public key (`encryptPubKey`)
+     - Test metadata (timestamp, test flag, etc.)
+
+3. **Verification Phase:**
+   - Bob waits for an acknowledgment message from Alice.
+   - The acknowledgment should contain the received random number, confirming Alice successfully decrypted and processed the message.
+
+### Alice's Workflow
+
+1. **Initialization:**
+   - Alice starts up and begins listening for announcements and private messages.
+   - Alice sets up handlers to automatically add peers to peer data when their encryption keys are received in messages.
+
+2. **Message Reception:**
+   - Alice waits for Bob's test message.
+   - Upon receiving the message, Alice extracts Bob's encryption public key from the message payload.
+   - Alice adds Bob to her peer data with his encryption key (enabling her to encrypt the acknowledgment).
+
+3. **Acknowledgment:**
+   - Alice sends an encrypted acknowledgment message back to Bob containing:
+     - The received random number (verifying message integrity)
+     - Timestamps from both the original message and acknowledgment
+     - Acknowledgment flag
+
+### Test Completion
+
+Once Bob receives the acknowledgment from Alice, both nodes shut down gracefully. This confirms that:
+- Both nodes can establish TCP connections (even through firewalls/NAT)
+- Pubsub announcements are working correctly
+- Private encrypted messaging is functioning bidirectionally
+- Peer data exchange and encryption key management is working
 
 ## Versioning
 
