@@ -253,6 +253,21 @@ async function runTest (ipfsCoord, ipfs) {
     }
     console.log(`Bob peer ID: ${bobPeerId}`)
 
+    // IMPORTANT: Wait for Bob's announcement to populate peer data
+    // We received Bob's message, but we need his announcement to get his
+    // public key and other peer data for encryption
+    console.log('\nWaiting for Bob\'s announcement to populate peer data...')
+    await pollUntil(
+      () => {
+        const peerData = ipfsCoord.thisNode.peerData.filter(x => x.from === bobPeerId)
+        return peerData.length > 0
+      },
+      500, // Check every 500ms
+      60000*5, // 5 minute timeout (announcements happen every ~2 minutes)
+      'Bob peer data from announcement'
+    )
+    console.log('Bob peer data received!')
+
     // Step 2: Send acknowledgment
     console.log('\nStep 2: Sending acknowledgment to Bob...')
     

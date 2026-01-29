@@ -39,7 +39,7 @@ const IPFS_DIR = './.ipfsdata/ipfs'
 
 // Configuration: Add Alice's multiaddr here (e.g., '/ip4/1.2.3.4/tcp/4001/p2p/Qm...')
 // This will be used to extract Alice's peer ID for the test
-const ALICE_MULTIADDR = '/ip4/192.168.1.65/tcp/4001/p2p/12D3KooWQtGZCn74ZzBYAFf44tChxzTwsdVhFoSYA5mKboUR64rd' // TODO: Add Alice's multiaddr here
+const ALICE_MULTIADDR = '/ip4/192.168.1.65/tcp/4001/p2p/12D3KooWPwrAX6dpzgbrk7DF4Xim7rWDcTbF6c8BfyVL5ByvZZcn'
 
 // Test state
 let alicePeerId = null
@@ -228,7 +228,7 @@ function sleep (ms) {
 }
 
 // Poll for a condition with timeout
-async function pollUntil (conditionFn, intervalMs = 1000, timeoutMs = 60000, description = 'condition') {
+async function pollUntil (conditionFn, intervalMs = 1000, timeoutMs = 60000*5, description = 'condition') {
   const startTime = Date.now()
   while (Date.now() - startTime < timeoutMs) {
     if (await conditionFn()) {
@@ -244,72 +244,184 @@ async function runTest (ipfsCoord, ipfs) {
   try {
     console.log('\n=== Starting IP4 Peer Connection Test ===\n')
 
-    // Step 1: Wait for Alice's announcement
-    console.log('Step 1: Waiting for Alice\'s announcement...')
-    
-    // If we don't have Alice's peer ID from multiaddr, we need to discover it from announcements
-    if (!alicePeerId) {
-      console.log('Alice peer ID not provided, waiting for announcement...')
-      console.log('Will identify Alice as the first peer that announces itself.')
-      await pollUntil(
-        () => {
-          // Check if any peer in peerList matches
-          // In this test, we assume the first peer to announce is Alice
-          return ipfsCoord.thisNode.peerList.length > 0
-        },
-        2000, // Check every 2 seconds
-        60000, // 60 second timeout
-        'Alice announcement'
-      )
+    // Step 1: Connect directly to Alice using multiaddr (if provided)
+    if (ALICE_MULTIADDR && alicePeerId) {
+      console.log('Step 1: Connecting directly to Alice using multiaddr...')
+      console.log(`Alice multiaddr: ${ALICE_MULTIADDR}`)
+      console.log(`Alice peer ID: ${alicePeerId}`)
       
-      // Get the first peer as Alice
-      if (ipfsCoord.thisNode.peerList.length > 0) {
-        alicePeerId = ipfsCoord.thisNode.peerList[0]
-        console.log(`Alice discovered from announcement! Peer ID: ${alicePeerId}`)
-      } else {
-        throw new Error('Failed to discover Alice from announcements')
+      try {
+        const connectionResult = await ipfsCoord.adapters.ipfs.connectToPeer({ 
+          multiaddr: ALICE_MULTIADDR 
+        })
+        
+        if (connectionResult.success) {
+          console.log(`Successfully connected to Alice via ${ALICE_MULTIADDR}`)
+          
+          // Wait a moment for the connection to fully establish
+          await sleep(1000)
+          
+          // Verify connection
+          const connectedPeers = await ipfsCoord.adapters.ipfs.getPeers()
+          if (connectedPeers.includes(alicePeerId)) {
+            console.log('Connection verified!')
+          } else {
+            console.log('Connection may still be establishing, waiting...')
+            // Wait a bit more and verify again
+            await pollUntil(
+              async () => {
+                const peers = await ipfsCoord.adapters.ipfs.getPeers()
+                return peers.includes(alicePeerId)
+              },
+              500, // Check every 500ms
+              10000, // 10 second timeout
+              'connection verification'
+            )
+            console.log('Connection verified!')
+          }
+          
+          // IMPORTANT: Wait for Alice's announcement to populate peer data
+          // The direct connection establishes the link, but we still need the
+          // announcement to get Alice's public key and other peer data for encryption
+          console.log('Waiting for Alice\'s announcement to populate peer data...')
+          await pollUntil(
+            () => {
+              const peerData = ipfsCoord.thisNode.peerData.filter(x => x.from === alicePeerId)
+              return peerData.length > 0
+            },
+            500, // Check every 500ms
+            60000*5, // 5 minute timeout (announcements happen every ~2 minutes, but should be faster with direct connection)
+            'Alice peer data from announcement'
+          )
+          console.log('Alice peer data received!')
+        } else {
+          throw new Error(`Failed to connect: ${connectionResult.details}`)
+        }
+      } catch (err) {
+        console.error('Error connecting directly:', err)
+        console.log('Falling back to announcement-based discovery...')
+        
+        // Fallback: Wait for Alice's announcement
+        console.log('Waiting for Alice\'s announcement...')
+        await pollUntil(
+          () => {
+            return ipfsCoord.thisNode.peerList.includes(alicePeerId)
+          },
+          2000, // Check every 2 seconds
+          60000*5, // 5 minute timeout
+          'Alice announcement'
+        )
+        console.log(`Alice found in peer list!`)
+        
+        // Verify peer data is available
+        console.log('Verifying Alice peer data is available...')
+        await pollUntil(
+          () => {
+            const peerData = ipfsCoord.thisNode.peerData.filter(x => x.from === alicePeerId)
+            return peerData.length > 0
+          },
+          500, // Check every 500ms
+          10000, // 10 second timeout (should be immediate if peerList has it)
+          'Alice peer data verification'
+        )
+        console.log('Alice peer data verified!')
+        
+        // Try connection refresh as fallback
+        try {
+          await ipfsCoord.useCases.peer.refreshPeerConnections()
+          console.log('Connection refresh triggered')
+        } catch (refreshErr) {
+          console.error('Error triggering connection refresh:', refreshErr)
+        }
+        
+        // Wait for connection
+        await pollUntil(
+          async () => {
+            const connectedPeers = await ipfsCoord.adapters.ipfs.getPeers()
+            return connectedPeers.includes(alicePeerId)
+          },
+          1000, // Check every second
+          30000, // 30 second timeout
+          'connection to Alice'
+        )
+        console.log(`Successfully connected to Alice!`)
       }
     } else {
-      // Wait for Alice to appear in peerList (if we already know her peer ID)
-      console.log(`Waiting for Alice (${alicePeerId}) to appear in peer list...`)
+      // No multiaddr provided - fall back to announcement-based discovery
+      console.log('Step 1: Waiting for Alice\'s announcement (no multiaddr provided)...')
+      
+      if (!alicePeerId) {
+        console.log('Alice peer ID not provided, waiting for announcement...')
+        console.log('Will identify Alice as the first peer that announces itself.')
+        await pollUntil(
+          () => {
+            return ipfsCoord.thisNode.peerList.length > 0
+          },
+          2000, // Check every 2 seconds
+          60000*5, // 5 minute timeout
+          'Alice announcement'
+        )
+        
+        // Get the first peer as Alice
+        if (ipfsCoord.thisNode.peerList.length > 0) {
+          alicePeerId = ipfsCoord.thisNode.peerList[0]
+          console.log(`Alice discovered from announcement! Peer ID: ${alicePeerId}`)
+        } else {
+          throw new Error('Failed to discover Alice from announcements')
+        }
+      } else {
+        // Wait for Alice to appear in peerList
+        await pollUntil(
+          () => {
+            return ipfsCoord.thisNode.peerList.includes(alicePeerId)
+          },
+          2000, // Check every 2 seconds
+          60000*5, // 5 minute timeout
+          'Alice in peer list'
+        )
+        console.log(`Alice found in peer list!`)
+      }
+      
+      // Verify peer data is available (should be populated with peerList, but check to be safe)
+      console.log('Verifying Alice peer data is available...')
       await pollUntil(
         () => {
-          return ipfsCoord.thisNode.peerList.includes(alicePeerId)
+          const peerData = ipfsCoord.thisNode.peerData.filter(x => x.from === alicePeerId)
+          return peerData.length > 0
         },
-        2000, // Check every 2 seconds
-        60000, // 60 second timeout
-        'Alice in peer list'
+        500, // Check every 500ms
+        10000, // 10 second timeout (should be immediate if peerList has it)
+        'Alice peer data verification'
       )
-      console.log(`Alice found in peer list!`)
+      console.log('Alice peer data verified!')
+      
+      // Step 2: Connect to Alice
+      console.log('\nStep 2: Connecting to Alice...')
+      
+      // Trigger connection attempt
+      try {
+        await ipfsCoord.useCases.peer.refreshPeerConnections()
+        console.log('Connection refresh triggered')
+      } catch (err) {
+        console.error('Error triggering connection refresh:', err)
+      }
+      
+      // Wait for connection to be established
+      console.log('Waiting for connection to Alice...')
+      await pollUntil(
+        async () => {
+          const connectedPeers = await ipfsCoord.adapters.ipfs.getPeers()
+          return connectedPeers.includes(alicePeerId)
+        },
+        1000, // Check every second
+        30000, // 30 second timeout
+        'connection to Alice'
+      )
+      console.log(`Successfully connected to Alice!`)
     }
 
-    // Step 2: Connect to Alice
-    console.log('\nStep 2: Connecting to Alice...')
-    
-    // Trigger connection attempt
-    try {
-      await ipfsCoord.useCases.peer.refreshPeerConnections()
-      console.log('Connection refresh triggered')
-    } catch (err) {
-      console.error('Error triggering connection refresh:', err)
-      // Continue anyway, connection might still work
-    }
-
-    // Wait for connection to be established
-    console.log('Waiting for connection to Alice...')
-    await pollUntil(
-      async () => {
-        const connectedPeers = await ipfsCoord.adapters.ipfs.getPeers()
-        return connectedPeers.includes(alicePeerId)
-      },
-      1000, // Check every second
-      30000, // 30 second timeout
-      'connection to Alice'
-    )
-    console.log(`Successfully connected to Alice!`)
-
-    // Step 3: Send private message
-    console.log('\nStep 3: Sending private message to Alice...')
+    // Step 2: Send private message
+    console.log('\nStep 2: Sending private message to Alice...')
     const randomNumber = Math.floor(Math.random() * 1000000)
     const testMessage = {
       test: true,
@@ -327,8 +439,8 @@ async function runTest (ipfsCoord, ipfs) {
     )
     console.log('Message sent successfully!')
 
-    // Step 4: Wait for acknowledgment
-    console.log('\nStep 4: Waiting for acknowledgment from Alice...')
+    // Step 3: Wait for acknowledgment
+    console.log('\nStep 3: Waiting for acknowledgment from Alice...')
     
     // Reset acknowledgment state before waiting
     acknowledgmentReceived = false
@@ -346,8 +458,8 @@ async function runTest (ipfsCoord, ipfs) {
     console.log('Acknowledgment received from Alice!')
     console.log('Acknowledgment data:', acknowledgmentData)
 
-    // Step 5: Shutdown
-    console.log('\nStep 5: Test completed successfully! Shutting down...')
+    // Step 4: Shutdown
+    console.log('\nStep 4: Test completed successfully! Shutting down...')
     await ipfs.stop()
     console.log('IPFS node stopped gracefully.')
     console.log('\n=== Test Completed Successfully ===\n')
