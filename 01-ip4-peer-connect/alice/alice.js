@@ -204,7 +204,7 @@ function sleep (ms) {
 }
 
 // Poll for a condition with timeout
-async function pollUntil (conditionFn, intervalMs = 1000, timeoutMs = 60000, description = 'condition') {
+async function pollUntil (conditionFn, intervalMs = 1000, timeoutMs = 60000*5, description = 'condition') {
   const startTime = Date.now()
   while (Date.now() - startTime < timeoutMs) {
     if (await conditionFn()) {
