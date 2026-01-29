@@ -1,6 +1,6 @@
 /*
   This script creates a Helia IPFS node and attaches helia-coord to it.
-  This is the "bob" node for testing IP4 peer connections.
+  This is the "bob" node for testing IP4 peer connections and pubsub.
 */
 
 // Polyfill for Promise.withResolvers (Node.js v22+ feature, needed for Node.js v20)
@@ -37,7 +37,7 @@ const IPFS_DIR = './.ipfsdata/ipfs'
 
 // Configuration: Add Alice's multiaddr here (e.g., '/ip4/1.2.3.4/tcp/4001/p2p/Qm...')
 // This will be used to extract Alice's peer ID for the test
-const ALICE_MULTIADDR = '/ip4/192.168.1.65/tcp/4001/p2p/12D3KooWHhyYVMUQZDTxgdPPJhJVN9SQWYgSFHYy4HEoUkFQctyV'
+const ALICE_MULTIADDR = '/ip4/192.168.1.65/tcp/4001/p2p/12D3KooWFKA5Hxa3XQmkLGDEjoXqFSbqMT44uvJzMokeH171wLkQ'
 
 // Test state
 let alicePeerId = null

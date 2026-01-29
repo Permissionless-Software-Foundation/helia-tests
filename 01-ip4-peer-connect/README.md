@@ -34,3 +34,7 @@ The *bob* node will attempt to connect directly to the *alice* node using the mu
 Once the *bob* node has successfully registered the *alice* node as a peer, the bob node will send a private message to the alice node with a random number inside the message. The alice node will acknowledge the message by replying to it in a second private message over pubsub. Once that happens, the test will end and both nodes will shut down.
 
 This will confirm that both nodes can connect to one another and transfer pubsub messages.
+
+## Versioning
+
+- v1.0.0 ran successfully, tested against node.js v20, helia-coord v1.8.0, helia v5.2.1, libp2p v2.6.0.
