@@ -109,13 +109,14 @@ async function start () {
     // Extract Alice's peer ID from multiaddr if provided
     if (ALICE_MULTIADDR) {
       try {
-        const aliceMa = multiaddr(ALICE_MULTIADDR)
-        const peerIdStr = aliceMa.getPeerId()
-        if (peerIdStr) {
-          alicePeerId = peerIdStr
+        // Parse the multiaddr string directly to extract peer ID
+        // Format: /ip4/.../tcp/.../p2p/PEER_ID
+        const p2pMatch = ALICE_MULTIADDR.match(/\/p2p\/([^/]+)/)
+        if (p2pMatch && p2pMatch[1]) {
+          alicePeerId = p2pMatch[1]
           console.log(`Alice peer ID extracted from multiaddr: ${alicePeerId}`)
         } else {
-          console.warn('Warning: Could not extract peer ID from Alice multiaddr')
+          console.warn('Warning: Could not extract peer ID from Alice multiaddr (no /p2p/ component found)')
         }
       } catch (err) {
         console.error('Error parsing Alice multiaddr:', err)
