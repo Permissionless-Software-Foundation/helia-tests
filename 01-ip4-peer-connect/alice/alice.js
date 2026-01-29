@@ -103,16 +103,8 @@ async function start () {
     const wallet = new SlpWallet()
     await wallet.walletInfoPromise
 
-    // Pass IPFS and wallet to ipfs-coord when instantiating it.
-    // We'll set up the message handler after ipfsCoord is created so it can access it
-    const ipfsCoord = new IpfsCoord({
-      ipfs,
-      wallet,
-      type: 'node.js',
-      nodeType: 'external',
-      debugLevel: 2,
-      privateLog: null // Will be set below
-    })
+    // Use a variable that will hold ipfsCoord so the handler can access it via closure
+    let ipfsCoordRef = null
 
     // Set up private message handler
     // This will be called when private messages are received
@@ -161,16 +153,17 @@ async function start () {
             
             // CRITICAL: Immediately add Bob to peerData with encryption key from message
             // This must happen BEFORE the automatic acknowledgment mechanism tries to send an ack
-            if (messageData.encryptPubKey) {
+            // Note: ipfsCoordRef will be available when this handler is actually called (after start())
+            if (messageData.encryptPubKey && ipfsCoordRef && ipfsCoordRef.thisNode) {
               console.log('\n[handlePrivateMessage] Adding Bob to peerData with encryption key from message...')
               
               // Check if Bob is already in peerData
-              const existingPeerData = ipfsCoord.thisNode.peerData.filter(x => x.from === bobPeerId)
+              const existingPeerData = ipfsCoordRef.thisNode.peerData.filter(x => x.from === bobPeerId)
               
               if (existingPeerData.length === 0) {
                 // Add Bob to peerList if not already there
-                if (!ipfsCoord.thisNode.peerList.includes(bobPeerId)) {
-                  ipfsCoord.thisNode.peerList.push(bobPeerId)
+                if (!ipfsCoordRef.thisNode.peerList.includes(bobPeerId)) {
+                  ipfsCoordRef.thisNode.peerList.push(bobPeerId)
                 }
                 
                 // Create peer data object with Bob's encryption key
@@ -182,7 +175,7 @@ async function start () {
                 }
                 
                 // Add to peerData
-                ipfsCoord.thisNode.peerData.push(bobPeerData)
+                ipfsCoordRef.thisNode.peerData.push(bobPeerData)
                 console.log('[handlePrivateMessage] Bob added to peerData with encryption key from message')
               } else {
                 // Update existing peer data with encryption key if not present
@@ -196,6 +189,8 @@ async function start () {
                   console.log('[handlePrivateMessage] Bob already has encryption key in peerData')
                 }
               }
+            } else if (messageData.encryptPubKey) {
+              console.warn('[handlePrivateMessage] WARNING: ipfsCoordRef not available yet, cannot add Bob to peerData')
             } else {
               console.warn('[handlePrivateMessage] WARNING: Bob\'s encryption key not found in test message!')
             }
@@ -206,8 +201,18 @@ async function start () {
       }
     }
 
-    // Attach the message handler to ipfsCoord
-    ipfsCoord.thisNode.privateLog = handlePrivateMessage
+    // Pass IPFS and wallet to ipfs-coord when instantiating it.
+    const ipfsCoord = new IpfsCoord({
+      ipfs,
+      wallet,
+      type: 'node.js',
+      nodeType: 'external',
+      debugLevel: 2,
+      privateLog: handlePrivateMessage
+    })
+
+    // Set the reference so the handler can access it
+    ipfsCoordRef = ipfsCoord
 
     await ipfsCoord.start()
     console.log('IPFS and the coordination library is ready.')
