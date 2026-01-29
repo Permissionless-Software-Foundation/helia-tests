@@ -25,7 +25,6 @@ import { tcp } from '@libp2p/tcp'
 import { noise } from '@chainsafe/libp2p-noise'
 import { yamux } from '@chainsafe/libp2p-yamux'
 import { identify } from '@libp2p/identify'
-import { circuitRelayTransport } from '@libp2p/circuit-relay-v2'
 import { gossipsub } from '@chainsafe/libp2p-gossipsub'
 import { webSockets } from '@libp2p/websockets'
 import { publicIpv4 } from 'public-ip'
@@ -66,14 +65,12 @@ async function start () {
           '/ip4/127.0.0.1/tcp/0',
           '/ip4/0.0.0.0/tcp/4001',
           '/ip4/0.0.0.0/tcp/4003/ws',
-          '/webrtc',
-          '/p2p-circuit'
+          '/webrtc'
         ]
       },
       transports: [
         tcp(),
         webSockets(),
-        circuitRelayTransport({ discoverRelays: 3 }),
         webRTC()
       ],
       connectionEncrypters: [
