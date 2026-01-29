@@ -29,7 +29,6 @@ import { gossipsub } from '@chainsafe/libp2p-gossipsub'
 import { webSockets } from '@libp2p/websockets'
 import { publicIpv4 } from 'public-ip'
 import { multiaddr } from '@multiformats/multiaddr'
-import { webRTC } from '@libp2p/webrtc'
 import SlpWallet from 'minimal-slp-wallet'
 import IpfsCoord from 'helia-coord'
 
@@ -64,14 +63,12 @@ async function start () {
         listen: [
           '/ip4/127.0.0.1/tcp/0',
           '/ip4/0.0.0.0/tcp/4001',
-          '/ip4/0.0.0.0/tcp/4003/ws',
-          '/webrtc'
+          '/ip4/0.0.0.0/tcp/4003/ws'
         ]
       },
       transports: [
         tcp(),
-        webSockets(),
-        webRTC()
+        webSockets()
       ],
       connectionEncrypters: [
         noise()
