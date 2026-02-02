@@ -37,7 +37,7 @@ const IPFS_DIR = './.ipfsdata/ipfs'
 
 // Configuration: Add Alice's multiaddr here (e.g., '/ip4/1.2.3.4/tcp/4001/p2p/Qm...')
 // This will be used to extract Alice's peer ID for the test
-const ALICE_MULTIADDR = '/ip4/192.168.1.65/tcp/4001/p2p/12D3KooWHt6NpVkgjYuZTjWJaBhT2MLoo1WVsCWFzWR7MM1JZ6WX'
+const ALICE_MULTIADDR = '/ip4/192.168.1.65/tcp/4001/p2p/12D3KooWMrWaMA9AEPH1KVSHPyghB9NPz99KfYFJ6yqEsPvvkNNj'
 
 // Test state
 let alicePeerId = null
