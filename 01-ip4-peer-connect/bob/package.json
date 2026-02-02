@@ -26,5 +26,13 @@
     "libp2p": "2.6.0",
     "minimal-slp-wallet": "7.1.4",
     "public-ip": "6.0.1"
+  },
+  "overrides": {
+    "@multiformats/multiaddr-to-uri": "10.1.2",
+    "@multiformats/multiaddr-matcher": "1.6.0",
+    "helia": {
+      "libp2p": "2.6.0",
+      "@libp2p/upnp-nat": "3.0.0"
+    }
   }
 }
